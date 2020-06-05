@@ -2,11 +2,28 @@ import telebot as tb
 import configparser
 import sqlite3
 import datetime
+from time import sleep, time
+from multiprocessing import Process
 
+HELP_TEXT = '/find [название] - поиск пароля по названию, команда без атрибута выдаёт все записи из таблицы\n' \
+       '/show <номер записи> - показ полной информации по номеру\n' \
+       'Сообщения с паролями удаляется через 5 минут\n' \
+       '/addpswd <форматированная строка для добавления данных в базу>- добпвление новой записи в БД\n' \
+       'формат строки - <разделитель>название<разделитель>текущий логин/пароль<разделитель>[комментарий] <разделитель>' \
+       'старые пароли\n' \
+       'в качестве разделителя может быть любой символ которого нет в логине пароле и коммантари\n' \
+       '/changepswd <форматированная строка для изменения данных> - обновление пароля и комментария в БД\n' \
+       'формат строки - <разделитель>номер строки<разделитель> новый логин/пароль<разделитель>[комментарий]'
 
-HELP_TEXT = 'User help'
-
-ADMIN_HELP_TEXT = '/showguests - показать список гостей\n' \
+ADMIN_HELP_TEXT = 'Администрирование БД\n' \
+                  '/delete_pswd <номер записи> - удаляет строку из БД\n' \
+                  '/change_data <форматированная строка>\n' \
+                  'формат строки - <разделитель>номер записи<разделитель>название<разделитель>текущий логин/пароль' \
+                  '<разделитель>[комментарий]<разделитель>старые пароли\n' \
+                  '/history_pswd <номер записи> - вывод истории изменений данной строки' \
+                  '(история сохраняется только для команды /changepswd)\n' \
+                  'Команды управления пользователями\n' \
+                  '/showguests - показать список гостей\n' \
                   '/showusers - показать список пользователей\n' \
                   '/clearguests - очистить список гостей\n' \
                   '/remove <ID> - удалить пользователя\n' \
@@ -19,6 +36,7 @@ config = configparser.ConfigParser()
 config.read('config.ini')
 token_file = config.get('Settings', 'token_file')
 proxy_type = config.get('Settings', 'proxy_type')
+config.read('proxy.ini')
 proxy_address = config.get('Settings', 'proxy_address')
 
 
@@ -28,19 +46,115 @@ f.close()
 
 tb.apihelper.proxy = {proxy_type: proxy_address}
 
-# conn = sqlite3.connect("database.db")
-# cursor = conn.cursor()
+
+def new_data(data_name, current_data, comment, old_data):
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    entities = (data_name, current_data, comment, old_data)
+    cursor.execute('SELECT * FROM main_table WHERE data_name =:data_name', {'data_name': data_name})
+    data_present = cursor.fetchone()
+    if not(data_present is None):
+        cursor.close()
+        return False
+    else:
+        cursor.execute("""INSERT INTO main_table(data_name, current_data, comment, old_data) 
+                      VALUES(?, ?, ?, ?)""", entities)
+    conn.commit()
+    cursor.close()
+    return True
 
 
-# cursor.execute("""CREATE TABLE users(id integer, name text, rights integer)
-#               """)
-# cursor.execute("""CREATE TABLE guests(id integer, last_connect text)
-#               """)
-# cursor.execute("drop table guests")
-# entities =(  ,  )
-# cursor.execute("""INSERT INTO users(id, name, rights) VALUES(?, ?,?)""", entities)
-# conn.commit()
-# cursor.close()
+def change_data(data_id, new_data, comment, user_id):
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM main_table WHERE data_id =:data_id', {'data_id': data_id})
+    data_present = cursor.fetchone()
+    if data_present is None:
+        cursor.close()
+        return False
+    else:
+        if comment == '':
+            comment = data_present[3]
+        old_data = data_present[2] + ' ' + data_present[4]
+        now = datetime.datetime.now()
+        entities = (user_id, now.isoformat(), data_present[2], new_data, data_present[0])
+        cursor.execute('INSERT INTO change_log(user_id, date_log, old_data, new_data, main_table_id)'
+                       ' VALUES(?, ?, ?, ?, ?)', entities)
+        cursor.execute("""UPDATE main_table SET  current_data =:current_data , comment =:comment 
+                      , old_data =:old_data WHERE  data_id =:data_id 
+                     """, {'data_id': data_id, 'current_data': new_data, 'old_data': old_data, 'comment': comment})
+        conn.commit()
+        cursor.close()
+
+
+def find_data(data_name):
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    cursor.execute("""SELECT data_id, data_name, current_data
+                    FROM main_table WHERE data_name LIKE ?""", [data_name])
+    data_present = cursor.fetchall()
+    if not data_present:
+        cursor.close()
+        return False
+    cursor.close()
+    return data_present
+
+
+def show_data_on_id(data_id):
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    cursor.execute("""SELECT * FROM main_table WHERE data_id = ?""", [data_id])
+    data_present = cursor.fetchone()
+    if not data_present:
+        cursor.close()
+        return False
+    cursor.close()
+    return data_present
+
+
+def delete_pswd(data_id):
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    cursor.execute('SELECT id FROM main_table WHERE data_id =:data_id', {'data_id': data_id})
+    data_present = cursor.fetchone()
+    if data_present is None:
+        cursor.close()
+        return False
+    else:
+        cursor.execute('DELETE FROM main_table WHERE data_id =:data_id', {'data_id': data_id})
+    conn.commit()
+    cursor.close()
+    return True
+
+
+def adm_change_data(data_id, data_name, current_data, comment, old_data):
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM main_table WHERE data_id =:data_id', {'data_id': data_id})
+    data_present = cursor.fetchone()
+    if data_present is None:
+        cursor.close()
+        return False
+    else:
+        cursor.execute("""UPDATE main_table SET  data_name =:data_name, current_data =:current_data , comment =:comment 
+                      , old_data =:old_data WHERE  data_id =:data_id 
+                      """, {'data_id': data_id, 'data_name': data_name,  'current_data': current_data,
+                      'old_data': old_data, 'comment': comment})
+        conn.commit()
+        cursor.close()
+        return True
+
+
+def show_history(data_id):
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    cursor.execute("""SELECT * FROM change_log WHERE main_table_id = ?""", [data_id])
+    data_present = cursor.fetchall()
+    if not data_present:
+        cursor.close()
+        return False
+    cursor.close()
+    return data_present
 
 
 def acl_check(user_id):
@@ -78,6 +192,7 @@ def del_guest(guest_id):
     cursor.execute('SELECT id FROM guests WHERE id =:id', {'id': guest_id})
     guest_present = cursor.fetchone()
     if guest_present is None:
+        cursor.close()
         return
     else:
         cursor.execute('DELETE FROM guests WHERE id =:id', {'id': guest_id})
@@ -91,6 +206,7 @@ def del_user(user_id):
     cursor.execute('SELECT id FROM users WHERE id =:id', {'id': user_id})
     user_present = cursor.fetchone()
     if user_present is None:
+        cursor.close()
         return False
     else:
         cursor.execute('DELETE FROM users WHERE id =:id', {'id': user_id})
@@ -122,7 +238,7 @@ def user_add(user_id, name):
     if user_present is None:
         entities = (user_id, name, 1)
         cursor.execute("""INSERT INTO users(id, name, rights) VALUES(?, ?, ?) """, entities)
-    conn.commit()
+        conn.commit()
     cursor.close()
 
 
@@ -163,7 +279,6 @@ def change_access(message):
         bot.send_message(message.chat.id, 'Направильный формат команды')
         return
     id_user = int(message.text[5:index])
-    print(id_user)
     if message.chat.id == id_user:
         bot.send_message(message.chat.id, 'Нельзя изменить свой уровень доступа')
         return
@@ -176,7 +291,7 @@ def change_access(message):
 
 
 @bot.message_handler(commands=['clearguests'])
-def clearguests(message):
+def clear_guests(message):
     acl = acl_check(message.chat.id)
     if acl > 0:
         return
@@ -287,4 +402,213 @@ def start_message(message):
         bot.send_message(message.chat.id, ADMIN_HELP_TEXT)
 
 
-bot.polling(none_stop=True, timeout=123)
+@bot.message_handler(commands=['addpswd'])
+def add_pswd(message):
+    acl = acl_check(message.chat.id)
+    if acl > 1:
+        return
+    message_string = message.text[8:].lstrip(' ')
+    sep = message_string[0]
+    tmp = cut_str(message_string[1:], sep)
+    data_name = tmp[1]
+    tmp = cut_str(tmp[0], sep)
+    current_data = tmp[1]
+    tmp = cut_str(tmp[0], sep)
+    comment = tmp[1]
+    old_data = tmp[0]
+    new_data(data_name, current_data, comment, old_data)
+
+
+@bot.message_handler(commands=['changepswd'])
+def change_pswd(message):
+    acl = acl_check(message.chat.id)
+    if acl > 1:
+        return
+    message_string = message.text[12:].lstrip(' ')
+    sep = message_string[0]
+    tmp = cut_str(message_string[1:], sep)
+    data_id = tmp[1]
+    if not data_id.isdigit():
+        bot.send_message(message.chat.id, 'Неправильный формат команды')
+        return
+    data_id = int(tmp[1])
+    tmp = cut_str(tmp[0], sep)
+    new_data = tmp[1]
+    comment = tmp[0]
+    change_data(data_id, new_data, comment, message.chat.id)
+    data = show_data_on_id(data_id)
+    output_string = str(data[0]) + '|' + data[1] + '|' + data[2] + '|' + data[3] + '| старые пароли ' + data[4]
+    bot.send_message(message.chat.id, output_string)
+    add_message_in_list(message.message_id+1, message.chat.id, int(time())+300)
+
+
+@bot.message_handler(commands=['show'])
+def show_pswd(message):
+    acl = acl_check(message.chat.id)
+    if acl > 2:
+        return
+    data_str = message.text[5:].lstrip(' ')
+    if not data_str.isdigit():
+        bot.send_message(message.chat.id, 'Неправильный формат запроса')
+        return
+    data_id = int(data_str)
+    data = show_data_on_id(data_id)
+    if data:
+        output_string = str(data[0]) + '|' + data[1] + '|' + data[2] + '|' + data[3] + '| старые пароли ' + data[4]
+        bot.send_message(message.chat.id, output_string)
+    else:
+        bot.send_message(message.chat.id, 'Индекс не найден')
+    add_message_in_list(message.message_id+1, message.chat.id, int(time())+300)
+
+
+@bot.message_handler(commands=['find'])
+def find_pswd(message):
+    acl = acl_check(message.chat.id)
+    if acl > 2:
+        return
+    data_name = '%' + message.text[5:].lstrip(' ') + '%'
+    data_list = find_data(data_name)
+    output_string = ''
+    if data_list:
+        for data in data_list:
+            output_string = output_string + str(data[0]) + '|' + data[1] + '|' + data[2] + '\n'
+        bot.send_message(message.chat.id, output_string)
+    else:
+        bot.send_message(message.chat.id, 'Совпадений не найдено')
+    add_message_in_list(message.message_id+1, message.chat.id, int(time())+300)
+
+
+@bot.message_handler(commands=['delpswd'])
+def delete_pswd(message):
+    acl = acl_check(message.chat.id)
+    if acl > 0:
+        return
+    data_str = message.text[5:].lstrip(' ')
+    if not data_str.isdigit():
+        bot.send_message(message.chat.id, 'Неправильный формат запроса')
+        return
+    data_id = int(data_str)
+    data_is_deleted = delete_pswd(data_id)
+    if data_is_deleted:
+        bot.send_message(message.chat.id, 'Строка удалена')
+    else:
+        bot.send_message(message.chat.id, 'Строка не найдена')
+
+
+@bot.message_handler(commands=['changedata'])
+def change_data(message):
+    acl = acl_check(message.chat.id)
+    if acl > 0:
+        return
+    message_string = message.text[11:].lstrip(' ')
+    sep = message_string[0]
+    tmp = cut_str(message_string[1:], sep)
+    data_id = tmp[1]
+    tmp = cut_str(tmp[0], sep)
+    data_name = tmp[1]
+    tmp = cut_str(tmp[0], sep)
+    current_data = tmp[1]
+    tmp = cut_str(tmp[0], sep)
+    comment = tmp[1]
+    old_data = tmp[0]
+    data_present = adm_change_data(data_id, data_name, current_data, comment, old_data)
+    if not data_present:
+        bot.send_message(message.chat.id, 'Строка не найдена')
+        return
+    data = show_data_on_id(data_id)
+    output_string = str(data[0]) + '|' + data[1] + '|' + data[2] + '|' + data[3] + '| старые пароли ' + data[4]
+    bot.send_message(message.chat.id, output_string)
+    add_message_in_list(message.message_id+1, message.chat.id, int(time())+300)
+
+
+@bot.message_handler(commands=['history'])
+def history_pswd(message):
+    acl = acl_check(message.chat.id)
+    if acl > 0:
+        return
+    data_str = message.text[8:].lstrip(' ')
+    if not data_str.isdigit():
+        bot.send_message(message.chat.id, 'Неправильный формат запроса')
+        return
+    data_id = int(data_str)
+    history_list = show_history(data_id)
+    output_string = ''
+    if history_list:
+        for data in history_list:
+            output_string = output_string + str(data[0]) + '|' + str(data[1]) + '|' + data[2] +\
+                            '|' + data[3] + '|' + data[4] + '\n'
+        bot.send_message(message.chat.id, output_string)
+    else:
+        bot.send_message(message.chat.id, 'Совпадений не найдено')
+    add_message_in_list(message.message_id+1, message.chat.id, int(time())+300)
+
+
+def cut_str(string, separator):
+    index = string.find(separator)
+    data = string[0:index]
+    string = string[index+1:]
+    return string, data
+
+
+def add_message_in_list(message_id, chat_id, message_time):
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    entities = (message_id, chat_id, message_time)
+    cursor.execute("""INSERT INTO message_list(message_id, chat_id, message_time) VALUES(?, ?, ?) """, entities)
+    conn.commit()
+    cursor.close()
+
+
+def delete_message():
+    while True:
+        conn = sqlite3.connect("database.db")
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM message_list')
+        message_list = cursor.fetchall()
+        for message in message_list:
+            if message[3] < int(time()):
+                bot.delete_message(message[2], message[1])
+                cursor.execute('DELETE FROM message_list WHERE id =:id', {'id': message[0]})
+        conn.commit()
+        cursor.close()
+        sleep(10)
+
+
+if __name__ == "__main__":
+
+#    conn_init = sqlite3.connect("database.db")
+#    cursor_init = conn_init.cursor()
+#    try:
+#        cursor_init.execute("drop table message_list")
+#    except Exception:
+#        print(0)
+#    finally:
+#        cursor_init.execute("""CREATE TABLE message_list(id integer PRIMARY KEY, message_id integer,
+#                                chat_id integer, message_time integer)""")
+#    cursor.execute("drop table main_table")
+#    cursor.execute("drop table change_log")
+#    cursor.execute("""CREATE TABLE users(id integer, name text, rights integer)
+#               """)
+#    cursor.execute("""CREATE TABLE guests(id integer, last_connect text)
+#               """)
+#    cursor.execute("""CREATE TABLE main_table(data_id integer PRIMARY KEY,data_name text,
+#                   current_data text,comment text, old_data text)
+#               """)
+#    cursor.execute("""CREATE TABLE change_log(log_id integer PRIMARY KEY, user_id integer,
+#                   date_log text, old_data text, new_data text, main_table_id integer)
+#               """)
+#    cursor.execute("drop table guests")
+#    entities =(  ,  )
+#    cursor.execute("""INSERT INTO users(id, name, rights) VALUES(?, ?,?)""", entities)
+#    conn_init.commit()
+#    cursor_init.close()
+
+    p1 = Process(target=delete_message, args=())
+    p1.start()
+
+    while True:
+        try:
+            bot.polling(none_stop=True, timeout=123)
+        except Exception as e:
+            print(e)
+            sleep(15)
