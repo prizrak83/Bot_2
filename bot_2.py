@@ -6,14 +6,14 @@ from time import sleep, time
 from multiprocessing import Process
 
 HELP_TEXT = '/find <название> - поиск пароля по названию, команда без атрибута выдаёт все записи из таблицы\n' \
-       '/show <номер записи> - показ полной информации по номеру\n' \
-       'Сообщения с паролями удаляется через 5 минут\n' \
-       '/addpswd <форматированная строка для добавления данных в базу>- добпвление новой записи в БД\n' \
-       'формат строки - <разделитель>название<разделитель>текущий логин/пароль<разделитель>[комментарий] <разделитель>' \
-       'старые пароли\n' \
-       'в качестве разделителя может быть любой символ которого нет в логине пароле и коммантари\n' \
-       '/changepswd <форматированная строка для изменения данных> - обновление пароля и комментария в БД\n' \
-       'формат строки - <разделитель>номер строки<разделитель> новый логин/пароль<разделитель>[комментарий]'
+     '/show <номер записи> - показ полной информации по номеру\n' \
+     'Сообщения с паролями удаляется через 5 минут\n' \
+     '/addpswd <форматированная строка для добавления данных в базу>- добпвление новой записи в БД\n' \
+     'формат строки - <разделитель>название<разделитель>текущий логин/пароль<разделитель>[комментарий] <разделитель>' \
+     'старые пароли\n' \
+     'в качестве разделителя может быть любой символ которого нет в логине пароле и коммантари\n' \
+     '/changepswd <форматированная строка для изменения данных> - обновление пароля и комментария в БД\n' \
+     'формат строки - <разделитель>номер строки<разделитель> новый логин/пароль<разделитель>[комментарий]'
 
 ADMIN_HELP_TEXT = 'Администрирование БД\n' \
                   '/delete_pswd <номер записи> - удаляет строку из БД\n' \
@@ -588,21 +588,18 @@ def init_db():
     global first_start
     conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
-    try:
-        cursor.execute("""CREATE TABLE IF NOT EXISTS message_list(id integer PRIMARY KEY, message_id integer,
-                            chat_id integer, message_time integer)""")
-        cursor.execute("""CREATE TABLE IF NOT EXISTS users(id integer, name text, rights integer)
-                       """)
-        cursor.execute("""CREATE TABLE IF NOT EXISTS guests(id integer, last_connect text)
-                      """)
-        cursor.execute("""CREATE TABLE IF NOT EXISTS main_table(data_id integer PRIMARY KEY,data_name text,
-                           current_data text,comment text, old_data text)
-                       """)
-        cursor.execute("""CREATE TABLE IF NOT EXISTS change_log(log_id integer PRIMARY KEY, user_id integer,
-                           date_log text, old_data text, new_data text, main_table_id integer)
-                       """)
-    except Exception:
-        print(0)
+    cursor.execute("""CREATE TABLE IF NOT EXISTS message_list(id integer PRIMARY KEY, message_id integer,
+                        chat_id integer, message_time integer)""")
+    cursor.execute("""CREATE TABLE IF NOT EXISTS users(id integer, name text, rights integer)
+                   """)
+    cursor.execute("""CREATE TABLE IF NOT EXISTS guests(id integer, last_connect text)
+                  """)
+    cursor.execute("""CREATE TABLE IF NOT EXISTS main_table(data_id integer PRIMARY KEY,data_name text,
+                       current_data text,comment text, old_data text)
+                   """)
+    cursor.execute("""CREATE TABLE IF NOT EXISTS change_log(log_id integer PRIMARY KEY, user_id integer,
+                       date_log text, old_data text, new_data text, main_table_id integer)
+                   """)
     cursor.execute('SELECT rights FROM users')
     right_num = cursor.fetchone()
     if right_num is not None:
