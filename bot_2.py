@@ -5,7 +5,7 @@ import datetime
 from time import sleep, time
 from multiprocessing import Process
 
-HELP_TEXT = '/find [название] - поиск пароля по названию, команда без атрибута выдаёт все записи из таблицы\n' \
+HELP_TEXT = '/find <название> - поиск пароля по названию, команда без атрибута выдаёт все записи из таблицы\n' \
        '/show <номер записи> - показ полной информации по номеру\n' \
        'Сообщения с паролями удаляется через 5 минут\n' \
        '/addpswd <форматированная строка для добавления данных в базу>- добпвление новой записи в БД\n' \
@@ -38,7 +38,7 @@ token_file = config.get('Settings', 'token_file')
 proxy_type = config.get('Settings', 'proxy_type')
 config.read('proxy.ini')
 proxy_address = config.get('Settings', 'proxy_address')
-
+first_start = True
 
 f = open(token_file)
 bot = tb.TeleBot(f.read())
@@ -384,14 +384,18 @@ def show_users(message):
     users_list = cursor.fetchall()
     text = 'Список зарегестрированных пользователей'
     for user in users_list:
-        text = text+'\n'+str(user[0])+' '+user[1]+' Уровень доступа '+str(user[2])
+        text = text+'\n'+str(user[0])+'|'+user[1]+' |Уровень доступа '+str(user[2])
     bot.send_message(message.chat.id, text)
     cursor.close()
 
 
 @bot.message_handler(commands=['start', 'help'])
 def start_message(message):
+    global first_start
     print(message.chat.id)
+    if first_start:
+        user_add(message.chat.id, 'Admin')
+        set_acl(message.chat.id, 0)
     acl = acl_check(message.chat.id)
     if acl > 2:
         add_guest_id(message.chat.id)
@@ -465,6 +469,9 @@ def show_pswd(message):
 def find_pswd(message):
     acl = acl_check(message.chat.id)
     if acl > 2:
+        return
+    if len(message.text) == 5:
+        bot.send_message(message.chat.id, 'Неуказано название для поиска')
         return
     data_name = '%' + message.text[5:].lstrip(' ') + '%'
     data_list = find_data(data_name)
@@ -561,6 +568,7 @@ def add_message_in_list(message_id, chat_id, message_time):
 
 def delete_message():
     while True:
+        sleep_time = 300
         conn = sqlite3.connect("database.db")
         cursor = conn.cursor()
         cursor.execute('SELECT * FROM message_list')
@@ -569,39 +577,43 @@ def delete_message():
             if message[3] < int(time()):
                 bot.delete_message(message[2], message[1])
                 cursor.execute('DELETE FROM message_list WHERE id =:id', {'id': message[0]})
+            elif sleep_time > message[3] - int(time()):
+                sleep_time = message[3] - int(time())
         conn.commit()
         cursor.close()
-        sleep(10)
+        sleep(sleep_time)
+
+
+def init_db():
+    global first_start
+    conn = sqlite3.connect("database.db")
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""CREATE TABLE IF NOT EXISTS message_list(id integer PRIMARY KEY, message_id integer,
+                            chat_id integer, message_time integer)""")
+        cursor.execute("""CREATE TABLE IF NOT EXISTS users(id integer, name text, rights integer)
+                       """)
+        cursor.execute("""CREATE TABLE IF NOT EXISTS guests(id integer, last_connect text)
+                      """)
+        cursor.execute("""CREATE TABLE IF NOT EXISTS main_table(data_id integer PRIMARY KEY,data_name text,
+                           current_data text,comment text, old_data text)
+                       """)
+        cursor.execute("""CREATE TABLE IF NOT EXISTS change_log(log_id integer PRIMARY KEY, user_id integer,
+                           date_log text, old_data text, new_data text, main_table_id integer)
+                       """)
+    except Exception:
+        print(0)
+    cursor.execute('SELECT rights FROM users')
+    right_num = cursor.fetchone()
+    if right_num is not None:
+        first_start = False
+    print(first_start)
+    conn.commit()
+    cursor.close()
 
 
 if __name__ == "__main__":
-
-#    conn_init = sqlite3.connect("database.db")
-#    cursor_init = conn_init.cursor()
-#    try:
-#        cursor_init.execute("drop table message_list")
-#    except Exception:
-#        print(0)
-#    finally:
-#        cursor_init.execute("""CREATE TABLE message_list(id integer PRIMARY KEY, message_id integer,
-#                                chat_id integer, message_time integer)""")
-#    cursor.execute("drop table main_table")
-#    cursor.execute("drop table change_log")
-#    cursor.execute("""CREATE TABLE users(id integer, name text, rights integer)
-#               """)
-#    cursor.execute("""CREATE TABLE guests(id integer, last_connect text)
-#               """)
-#    cursor.execute("""CREATE TABLE main_table(data_id integer PRIMARY KEY,data_name text,
-#                   current_data text,comment text, old_data text)
-#               """)
-#    cursor.execute("""CREATE TABLE change_log(log_id integer PRIMARY KEY, user_id integer,
-#                   date_log text, old_data text, new_data text, main_table_id integer)
-#               """)
-#    cursor.execute("drop table guests")
-#    entities =(  ,  )
-#    cursor.execute("""INSERT INTO users(id, name, rights) VALUES(?, ?,?)""", entities)
-#    conn_init.commit()
-#    cursor_init.close()
+    init_db()
 
     p1 = Process(target=delete_message, args=())
     p1.start()
