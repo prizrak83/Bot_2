@@ -35,20 +35,25 @@ ADMIN_HELP_TEXT = 'Администрирование БД\n' \
 config = configparser.ConfigParser()
 config.read('config.ini')
 token_file = config.get('Settings', 'token_file')
-proxy_type = config.get('Settings', 'proxy_type')
-config.read('proxy.ini')
-proxy_address = config.get('Settings', 'proxy_address')
+database_name = config.get('Settings', 'database_name')
+
 first_start = True
+
 
 f = open(token_file)
 bot = tb.TeleBot(f.read())
 f.close()
 
-tb.apihelper.proxy = {proxy_type: proxy_address}
+if config.get('Settings', 'use_proxy') == 'yes':
+    config.read('proxy.ini')
+    proxy_address = config.get('Settings', 'proxy_address')
+    proxy_type = config.get('Settings', 'proxy_type')
+    tb.apihelper.proxy = {proxy_type: proxy_address}
 
 
 def new_data(data_name, current_data, comment, old_data):
-    conn = sqlite3.connect("database.db")
+    global database_name
+    conn = sqlite3.connect(database_name)
     cursor = conn.cursor()
     entities = (data_name, current_data, comment, old_data)
     cursor.execute('SELECT * FROM main_table WHERE data_name =:data_name', {'data_name': data_name})
@@ -65,7 +70,8 @@ def new_data(data_name, current_data, comment, old_data):
 
 
 def change_data(data_id, new_data, comment, user_id):
-    conn = sqlite3.connect("database.db")
+    global database_name
+    conn = sqlite3.connect(database_name)
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM main_table WHERE data_id =:data_id', {'data_id': data_id})
     data_present = cursor.fetchone()
@@ -88,7 +94,8 @@ def change_data(data_id, new_data, comment, user_id):
 
 
 def find_data(data_name):
-    conn = sqlite3.connect("database.db")
+    global database_name
+    conn = sqlite3.connect(database_name)
     cursor = conn.cursor()
     cursor.execute("""SELECT data_id, data_name, current_data
                     FROM main_table WHERE data_name LIKE ?""", [data_name])
@@ -101,7 +108,8 @@ def find_data(data_name):
 
 
 def show_data_on_id(data_id):
-    conn = sqlite3.connect("database.db")
+    global database_name
+    conn = sqlite3.connect(database_name)
     cursor = conn.cursor()
     cursor.execute("""SELECT * FROM main_table WHERE data_id = ?""", [data_id])
     data_present = cursor.fetchone()
@@ -113,7 +121,8 @@ def show_data_on_id(data_id):
 
 
 def delete_pswd(data_id):
-    conn = sqlite3.connect("database.db")
+    global database_name
+    conn = sqlite3.connect(database_name)
     cursor = conn.cursor()
     cursor.execute('SELECT id FROM main_table WHERE data_id =:data_id', {'data_id': data_id})
     data_present = cursor.fetchone()
@@ -128,7 +137,8 @@ def delete_pswd(data_id):
 
 
 def adm_change_data(data_id, data_name, current_data, comment, old_data):
-    conn = sqlite3.connect("database.db")
+    global database_name
+    conn = sqlite3.connect(database_name)
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM main_table WHERE data_id =:data_id', {'data_id': data_id})
     data_present = cursor.fetchone()
@@ -146,7 +156,8 @@ def adm_change_data(data_id, data_name, current_data, comment, old_data):
 
 
 def show_history(data_id):
-    conn = sqlite3.connect("database.db")
+    global database_name
+    conn = sqlite3.connect(database_name)
     cursor = conn.cursor()
     cursor.execute("""SELECT * FROM change_log WHERE main_table_id = ?""", [data_id])
     data_present = cursor.fetchall()
@@ -158,7 +169,8 @@ def show_history(data_id):
 
 
 def acl_check(user_id):
-    conn = sqlite3.connect("database.db")
+    global database_name
+    conn = sqlite3.connect(database_name)
     cursor = conn.cursor()
     cursor.execute('SELECT rights FROM users WHERE id =:id', {'id': user_id})
     right_num = cursor.fetchone()
@@ -171,7 +183,8 @@ def acl_check(user_id):
 
 
 def add_guest_id(guest_id):
-    conn = sqlite3.connect("database.db")
+    global database_name
+    conn = sqlite3.connect(database_name)
     cursor = conn.cursor()
     now = datetime.datetime.now()
     cursor.execute('SELECT id FROM guests WHERE id =:id', {'id': guest_id})
@@ -187,7 +200,8 @@ def add_guest_id(guest_id):
 
 
 def del_guest(guest_id):
-    conn = sqlite3.connect("database.db")
+    global database_name
+    conn = sqlite3.connect(database_name)
     cursor = conn.cursor()
     cursor.execute('SELECT id FROM guests WHERE id =:id', {'id': guest_id})
     guest_present = cursor.fetchone()
@@ -201,7 +215,8 @@ def del_guest(guest_id):
 
 
 def del_user(user_id):
-    conn = sqlite3.connect("database.db")
+    global database_name
+    conn = sqlite3.connect(database_name)
     cursor = conn.cursor()
     cursor.execute('SELECT id FROM users WHERE id =:id', {'id': user_id})
     user_present = cursor.fetchone()
@@ -216,7 +231,8 @@ def del_user(user_id):
 
 
 def rename_user(user_id, new_name):
-    conn = sqlite3.connect("database.db")
+    global database_name
+    conn = sqlite3.connect(database_name)
     cursor = conn.cursor()
     cursor.execute('SELECT id FROM users WHERE id =:id', {'id': user_id})
     user_present = cursor.fetchone()
@@ -231,7 +247,8 @@ def rename_user(user_id, new_name):
 
 
 def user_add(user_id, name):
-    conn = sqlite3.connect("database.db")
+    global database_name
+    conn = sqlite3.connect(database_name)
     cursor = conn.cursor()
     cursor.execute('SELECT id FROM users WHERE id =:id', {'id': user_id})
     user_present = cursor.fetchone()
@@ -243,7 +260,8 @@ def user_add(user_id, name):
 
 
 def remove_all_guests():
-    conn = sqlite3.connect("database.db")
+    global database_name
+    conn = sqlite3.connect(database_name)
     cursor = conn.cursor()
     cursor.execute("drop table guests")
     cursor.execute("""CREATE TABLE guests(id integer, last_connect text)""")
@@ -252,7 +270,8 @@ def remove_all_guests():
 
 
 def set_acl(user_id, acl):
-    conn = sqlite3.connect("database.db")
+    global database_name
+    conn = sqlite3.connect(database_name)
     cursor = conn.cursor()
     cursor.execute('SELECT id FROM users WHERE id =:id', {'id': user_id})
     user_present = cursor.fetchone()
@@ -359,10 +378,11 @@ def add_user(message):
 
 @bot.message_handler(commands=['showguests'])
 def show_guests(message):
+    global database_name
     acl = acl_check(message.chat.id)
     if acl > 0:
         return
-    conn = sqlite3.connect("database.db")
+    conn = sqlite3.connect(database_name)
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM guests')
     guest_list = cursor.fetchall()
@@ -375,10 +395,11 @@ def show_guests(message):
 
 @bot.message_handler(commands=['showusers'])
 def show_users(message):
+    global database_name
     acl = acl_check(message.chat.id)
     if acl > 0:
         return
-    conn = sqlite3.connect("database.db")
+    conn = sqlite3.connect(database_name)
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM users')
     users_list = cursor.fetchall()
@@ -558,7 +579,8 @@ def cut_str(string, separator):
 
 
 def add_message_in_list(message_id, chat_id, message_time):
-    conn = sqlite3.connect("database.db")
+    global database_name
+    conn = sqlite3.connect(database_name)
     cursor = conn.cursor()
     entities = (message_id, chat_id, message_time)
     cursor.execute("""INSERT INTO message_list(message_id, chat_id, message_time) VALUES(?, ?, ?) """, entities)
@@ -567,9 +589,10 @@ def add_message_in_list(message_id, chat_id, message_time):
 
 
 def delete_message():
+    global database_name
     while True:
         sleep_time = 300
-        conn = sqlite3.connect("database.db")
+        conn = sqlite3.connect(database_name)
         cursor = conn.cursor()
         cursor.execute('SELECT * FROM message_list')
         message_list = cursor.fetchall()
@@ -585,8 +608,8 @@ def delete_message():
 
 
 def init_db():
-    global first_start
-    conn = sqlite3.connect("database.db")
+    global database_name, first_start
+    conn = sqlite3.connect(database_name)
     cursor = conn.cursor()
     cursor.execute("""CREATE TABLE IF NOT EXISTS message_list(id integer PRIMARY KEY, message_id integer,
                         chat_id integer, message_time integer)""")
