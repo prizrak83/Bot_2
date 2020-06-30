@@ -2,6 +2,7 @@ import telebot as tb
 import configparser
 import sqlite3
 import datetime
+import sys
 from time import sleep, time
 from multiprocessing import Process
 
@@ -34,15 +35,15 @@ ADMIN_HELP_TEXT = 'Администрирование БД\n' \
 
 config = configparser.ConfigParser()
 config.read('config.ini')
-token_file = config.get('Settings', 'token_file')
 database_name = config.get('Settings', 'database_name')
 
 first_start = True
 
-
-f = open(token_file)
-bot = tb.TeleBot(f.read())
-f.close()
+if len(sys.argv) > 1:
+    bot = tb.TeleBot(sys.argv[1])
+else:
+    print('error, token not found')
+    sys.exit()
 
 if config.get('Settings', 'use_proxy') == 'yes':
     config.read('proxy.ini')
@@ -627,7 +628,6 @@ def init_db():
     right_num = cursor.fetchone()
     if right_num is not None:
         first_start = False
-    print(first_start)
     conn.commit()
     cursor.close()
 
