@@ -5,4 +5,4 @@ ADD requirements.txt /app/
 RUN pip install -r /app/requirements.txt
 ADD . /app/
 WORKDIR /app
-CMD python bot_2.py
+ENTRYPOINT ["python", "bot_2.py"]
