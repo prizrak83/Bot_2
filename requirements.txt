@@ -15,7 +15,7 @@ packaging==20.4
 pluggy==0.13.1
 post==2019.4.13
 public==2019.4.13
-py==1.8.1
+py==1.10.0
 PyICU @ file:///D:/Python/projects/Telegram_bot2/PyICU-2.4.3-cp38-cp38-win32.whl
 pyparsing==2.4.7
 pyreadline==2.1
