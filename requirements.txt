@@ -28,5 +28,5 @@ pytest-rerunfailures==9.0
 query-string==2019.4.13
 requests==2.23.0
 six==1.14.0
-urllib3==1.25.9
+urllib3==1.26.5
 wcwidth==0.1.9
